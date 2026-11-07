@@ -124,6 +124,18 @@ class DigitalSensor:
     def last_event(self) -> SensorEvent | None:
         return self._last_event
 
+    def reset_stats(self) -> None:
+        """Forget the detection count and last event (used when history is cleared)."""
+        with self._lock:
+            self._count = 0
+            self._last_event = None
+
+    def restore_stats(self, count: int, last_event: SensorEvent | None) -> None:
+        """Seed the count / last event from stored history (used at startup)."""
+        with self._lock:
+            self._count = count
+            self._last_event = last_event
+
     def snapshot(self) -> dict[str, Any]:
         """Current state as plain data (for the API layer)."""
         last = self._last_event

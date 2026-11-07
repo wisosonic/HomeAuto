@@ -107,3 +107,31 @@ def test_disabled_setting_survives_restart(tmp_path):
         by_name = {s["name"]: s for s in c.get("/api/sensors").json()}
         assert by_name["sound"]["enabled"] is False
         assert by_name["pir"]["enabled"] is True
+
+
+def test_clear_events_resets_detection_counts(client):
+    for name in ("pir", "flame"):
+        client.post(f"/api/sensors/{name}/simulate", json={"active": True})
+    assert client.get("/api/sensors/pir").json()["detection_count"] == 1
+    # clearing one sensor only resets that sensor
+    client.delete("/api/events", params={"sensor": "pir"})
+    pir, flame = client.get("/api/sensors/pir").json(), client.get("/api/sensors/flame").json()
+    assert pir["detection_count"] == 0 and pir["last_event"] is None
+    assert flame["detection_count"] == 1 and flame["last_event"] is not None
+    # clearing everything resets all
+    client.delete("/api/events")
+    assert all(s["detection_count"] == 0 and s["last_event"] is None for s in client.get("/api/sensors").json())
+
+
+def test_counts_restored_from_history_on_restart_and_reset_by_clear(tmp_path):
+    db = str(tmp_path / "h.db")
+    with TestClient(create_app(mock=True, db_path=db)) as c:
+        for _ in range(2):
+            c.post("/api/sensors/pir/simulate", json={"active": True})
+            c.post("/api/sensors/pir/simulate", json={"active": False})
+    with TestClient(create_app(mock=True, db_path=db)) as c:
+        pir = c.get("/api/sensors/pir").json()
+        assert pir["detection_count"] == 2 and pir["last_event"]["active"] is False
+        c.delete("/api/events")
+    with TestClient(create_app(mock=True, db_path=db)) as c:
+        assert c.get("/api/sensors/pir").json()["detection_count"] == 0

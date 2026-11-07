@@ -67,6 +67,11 @@ def create_app(*, mock: bool | None = None, db_path: str | None = None) -> FastA
         for s in sensors.values():
             s.add_listener(store.add)
             s.add_listener(lambda ev: hub.publish_threadsafe({"type": "event", **ev.to_dict()}))
+        # Detection counts / last event come from the stored history, so they survive restarts
+        # and stay consistent with what the event log shows.
+        counts, last = store.activation_counts(), store.last_events()
+        for name, s in sensors.items():
+            s.restore_stats(counts.get(name, 0), last.get(name))
         for name in store.disabled_sensors():  # restore saved on/off settings
             if name in sensors:
                 sensors[name].disable()
@@ -119,6 +124,10 @@ def create_app(*, mock: bool | None = None, db_path: str | None = None) -> FastA
     @app.delete("/api/events")
     def clear_events(sensor: str | None = None):
         deleted = app.state.store.clear(sensor)
+        # the counters are derived from the history, so they reset with it
+        for name, s in app.state.sensors.items():
+            if sensor is None or name == sensor:
+                s.reset_stats()
         app.state.hub.publish_threadsafe({"type": "events_cleared", "sensor": sensor})
         return {"deleted": deleted}
 

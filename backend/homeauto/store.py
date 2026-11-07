@@ -50,6 +50,25 @@ class EventStore:
             rows = self._db.execute(sql, args).fetchall()
         return [{**dict(r), "active": bool(r["active"])} for r in rows]
 
+    def activation_counts(self) -> dict[str, int]:
+        """Stored detections (activations) per sensor."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT sensor, COUNT(*) AS n FROM events WHERE active = 1 GROUP BY sensor"
+            ).fetchall()
+        return {r["sensor"]: r["n"] for r in rows}
+
+    def last_events(self) -> dict[str, SensorEvent]:
+        """Most recent stored event per sensor."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT sensor, kind, active, timestamp FROM events "
+                "WHERE id IN (SELECT MAX(id) FROM events GROUP BY sensor)"
+            ).fetchall()
+        return {
+            r["sensor"]: SensorEvent(r["sensor"], r["kind"], bool(r["active"]), r["timestamp"]) for r in rows
+        }
+
     def clear(self, sensor: str | None = None) -> int:
         """Delete all events (or one sensor's). Returns the number deleted."""
         with self._lock:

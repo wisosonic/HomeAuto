@@ -79,7 +79,7 @@ or module (actuators also need control endpoints and authentication).
 
 ```powershell
 # backend tests (Windows): from backend/
-.venv\Scripts\python -m pytest -q          # 19 tests, no hardware needed
+.venv\Scripts\python -m pytest -q          # 21 tests, no hardware needed
 # run everything on Windows (mock GPIO)
 .\runner.bat            # or: .\runner.bat nobrowser
 # on the Pi
@@ -94,6 +94,9 @@ Env vars: `HOMEAUTO_MOCK=1`, `HOMEAUTO_DB` (default `homeauto.db`), `HOMEAUTO_CO
 - PIR is active-HIGH. Sound, flame, IR obstacle, rain, vibration are assumed **active-LOW** (LM393
   modules pull DO low on detection). **None of this has been verified on real hardware.** The
   vibration module is the least certain (may be a tilt/reed switch); fix with `active_state=True`.
+- A sensor's detection count and last event are **derived from the stored event history**: rebuilt from
+  SQLite at startup (`restore_stats`) and reset when events are cleared (`reset_stats`, also in the
+  frontend's `events_cleared` handler). Don't keep separate in-memory counters that can drift from the log.
 - Debounce times in the sensor classes are guesses to tune on hardware.
 - PIR 5V comes straight from Pi pin 2 to its VCC column (no 5V breadboard rail), to avoid ever
   mixing rails. Everything else uses the 3.3V rail.

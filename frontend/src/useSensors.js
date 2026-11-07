@@ -52,6 +52,14 @@ export function useSensors() {
           setSensors((prev) => ({ ...prev, [msg.sensor.name]: msg.sensor }));
         } else if (msg.type === "events_cleared") {
           setEvents((prev) => (msg.sensor ? prev.filter((e) => e.sensor !== msg.sensor) : []));
+          // detection counts and last-seen time are derived from the history, so reset them too
+          setSensors((prev) =>
+            Object.fromEntries(
+              Object.entries(prev).map(([name, s]) =>
+                !msg.sensor || name === msg.sensor ? [name, { ...s, detection_count: 0, last_event: null }] : [name, s]
+              )
+            )
+          );
         } else if (msg.type === "event") {
           const { type, ...ev } = msg;
           setSensors((prev) => {
