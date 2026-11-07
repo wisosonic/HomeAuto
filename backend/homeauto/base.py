@@ -5,7 +5,10 @@ output (DO) that is either HIGH or LOW. Whether HIGH or LOW means "detected"
 depends on the module, which is what `active_state` captures.
 
 Hardware edges are delivered by gpiozero on a background thread and turned
-into `SensorEvent` objects, which is what the future API layer will consume.
+into `SensorEvent` objects, which is what the API layer consumes.
+
+A sensor can be disabled at runtime: the GPIO pin is released and no events are
+produced until it is enabled again.
 """
 
 from __future__ import annotations
@@ -59,19 +62,46 @@ class DigitalSensor:
         self._listeners: list[Listener] = []
         self._count = 0
         self._last_event: SensorEvent | None = None
-
         self._active_state = self.active_state if active_state is None else active_state
+        self._bounce = self.bounce_time if bounce_time is None else bounce_time
+        self._device: DigitalInputDevice | None = None
+        self._enabled = False
+        self.enable()
 
-        # pull_up=None: the module drives the line itself (no internal pull),
-        # which requires an explicit active_state.
-        self._device = DigitalInputDevice(
-            pin,
-            pull_up=None,
-            active_state=self._active_state,
-            bounce_time=self.bounce_time if bounce_time is None else bounce_time,
-        )
-        self._device.when_activated = lambda: self._emit(True)
-        self._device.when_deactivated = lambda: self._emit(False)
+    # -- enable / disable ------------------------------------------------
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    def enable(self) -> None:
+        """Claim the GPIO pin and start producing events (idempotent)."""
+        with self._lock:
+            if self._enabled:
+                return
+            # pull_up=None: the module drives the line itself (no internal pull),
+            # which requires an explicit active_state.
+            dev = DigitalInputDevice(
+                self.pin,
+                pull_up=None,
+                active_state=self._active_state,
+                bounce_time=self._bounce,
+            )
+            dev.when_activated = lambda: self._emit(True)
+            dev.when_deactivated = lambda: self._emit(False)
+            self._device = dev
+            self._enabled = True
+
+    def disable(self) -> None:
+        """Release the GPIO pin and stop producing events (idempotent)."""
+        with self._lock:
+            if not self._enabled:
+                return
+            self._enabled = False
+            dev, self._device = self._device, None
+        if dev is not None:
+            dev.when_activated = None
+            dev.when_deactivated = None
+            dev.close()
 
     # -- state -----------------------------------------------------------
     @property
@@ -82,7 +112,8 @@ class DigitalSensor:
     @property
     def is_active(self) -> bool:
         """True while the sensor is currently detecting something."""
-        return bool(self._device.is_active)
+        dev = self._device
+        return bool(dev.is_active) if dev is not None else False
 
     @property
     def detection_count(self) -> int:
@@ -100,6 +131,7 @@ class DigitalSensor:
             "name": self.name,
             "kind": self.kind,
             "pin": self.pin,
+            "enabled": self._enabled,
             "active": self.is_active,
             "detection_count": self._count,
             "last_event": last.to_dict() if last else None,
@@ -118,6 +150,8 @@ class DigitalSensor:
                 self._listeners.remove(fn)
 
     def _emit(self, active: bool) -> None:
+        if not self._enabled:
+            return
         event = SensorEvent(self.name, self.kind, active, time.time())
         with self._lock:
             if active:
@@ -132,7 +166,7 @@ class DigitalSensor:
 
     # -- lifecycle -------------------------------------------------------
     def close(self) -> None:
-        self._device.close()
+        self.disable()
 
     def __enter__(self) -> "DigitalSensor":
         return self
@@ -141,4 +175,5 @@ class DigitalSensor:
         self.close()
 
     def __repr__(self) -> str:
-        return f"<{type(self).__name__} {self.name!r} pin={self.pin} active={self.is_active}>"
+        state = "off" if not self._enabled else f"active={self.is_active}"
+        return f"<{type(self).__name__} {self.name!r} pin={self.pin} {state}>"

@@ -1,4 +1,5 @@
-"""SQLite event history. Written from gpiozero threads, so access is locked."""
+"""SQLite storage: event history and per-sensor settings. Written from gpiozero
+threads, so access is locked."""
 
 from __future__ import annotations
 
@@ -23,8 +24,12 @@ class EventStore:
                        timestamp REAL NOT NULL)"""
             )
             self._db.execute("CREATE INDEX IF NOT EXISTS idx_events_ts ON events(timestamp)")
+            self._db.execute(
+                "CREATE TABLE IF NOT EXISTS sensor_settings (sensor TEXT PRIMARY KEY, enabled INTEGER NOT NULL)"
+            )
             self._db.commit()
 
+    # -- events ----------------------------------------------------------
     def add(self, ev: SensorEvent) -> None:
         with self._lock:
             self._db.execute(
@@ -44,6 +49,31 @@ class EventStore:
         with self._lock:
             rows = self._db.execute(sql, args).fetchall()
         return [{**dict(r), "active": bool(r["active"])} for r in rows]
+
+    def clear(self, sensor: str | None = None) -> int:
+        """Delete all events (or one sensor's). Returns the number deleted."""
+        with self._lock:
+            if sensor:
+                cur = self._db.execute("DELETE FROM events WHERE sensor = ?", (sensor,))
+            else:
+                cur = self._db.execute("DELETE FROM events")
+            self._db.commit()
+            return cur.rowcount
+
+    # -- sensor settings -------------------------------------------------
+    def disabled_sensors(self) -> set[str]:
+        with self._lock:
+            rows = self._db.execute("SELECT sensor FROM sensor_settings WHERE enabled = 0").fetchall()
+        return {r["sensor"] for r in rows}
+
+    def set_enabled(self, sensor: str, enabled: bool) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO sensor_settings (sensor, enabled) VALUES (?, ?) "
+                "ON CONFLICT(sensor) DO UPDATE SET enabled = excluded.enabled",
+                (sensor, int(enabled)),
+            )
+            self._db.commit()
 
     def close(self) -> None:
         with self._lock:

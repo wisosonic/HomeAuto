@@ -75,3 +75,20 @@ def test_create_all_default_sensors():
     finally:
         for s in sensors.values():
             s.close()
+
+
+def test_disable_releases_pin_and_ignores_edges_then_reenables():
+    events = []
+    pir = PIRSensor(17)
+    pir.add_listener(events.append)
+    pir.disable()
+    assert not pir.enabled and not pir.is_active
+    _pin(17).drive_high()  # edge while disabled: nobody is listening
+    assert events == [] and pir.detection_count == 0
+    PIRSensor(17).close()  # pin was released, so it can be claimed again
+    pir.enable()
+    assert pir.enabled and pir.motion_detected  # reads the live level on re-enable
+    _pin(17).drive_low()
+    _pin(17).drive_high()
+    assert [e.active for e in events] == [False, True]
+    pir.close()

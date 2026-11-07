@@ -13,12 +13,18 @@ export function formatTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString();
 }
 
+export function sensorLabels(kind) {
+  return LABELS[kind] ?? { icon: "📟", active: "Active", idle: "Idle" };
+}
+
 export default function SensorCard({ sensor, mock }) {
-  const l = LABELS[sensor.kind] ?? { icon: "📟", active: "Active", idle: "Idle" };
-  const alert = sensor.active && sensor.kind === "flame";
+  const l = sensorLabels(sensor.kind);
+  const off = !sensor.enabled;
+  const on = sensor.active && !off;
+  const alert = on && sensor.kind === "flame";
 
   return (
-    <div className={`card ${sensor.active ? "on" : ""} ${alert ? "alert" : ""}`}>
+    <div className={`card ${on ? "on" : ""} ${alert ? "alert" : ""} ${off ? "off" : ""}`}>
       <div className="card-head">
         <span className="icon">{l.icon}</span>
         <div>
@@ -27,15 +33,15 @@ export default function SensorCard({ sensor, mock }) {
         </div>
         <span className="dot" />
       </div>
-      <p className="state">{sensor.active ? l.active : l.idle}</p>
+      <p className="state">{off ? "Disabled" : sensor.active ? l.active : l.idle}</p>
       <p className="meta">
         {sensor.detection_count} detections
         {sensor.last_event && <> · last {formatTime(sensor.last_event.timestamp)}</>}
       </p>
       {mock && (
         <div className="sim">
-          <button onClick={() => simulate(sensor.name, true)}>Trigger</button>
-          <button onClick={() => simulate(sensor.name, false)}>Clear</button>
+          <button disabled={off} onClick={() => simulate(sensor.name, true)}>Trigger</button>
+          <button disabled={off} onClick={() => simulate(sensor.name, false)}>Clear</button>
         </div>
       )}
     </div>

@@ -2,13 +2,17 @@
 
 REST:
   GET  /api/info                    {"mock": bool}
+  GET  /api/wiring                  pin map + breadboard layout
   GET  /api/sensors                 all sensor snapshots
   GET  /api/sensors/{name}          one snapshot
   GET  /api/events?limit=&sensor=   recent history (newest first)
+  DELETE /api/events?sensor=        clear history (all, or one sensor)
+  PUT  /api/sensors/{name}/enabled  {"enabled": bool}: persisted, frees the GPIO pin
   POST /api/sensors/{name}/simulate mock mode only: {"active": true|false}
 WebSocket:
   /ws   first message {"type":"snapshot","sensors":[...]}, then
-        {"type":"event", ...} per sensor change.
+        {"type":"event", ...}, {"type":"sensor_state","sensor":{...}},
+        {"type":"events_cleared","sensor":null|name}.
 
 Run on the Pi:      uvicorn homeauto.api:app --host 0.0.0.0
 Run without a Pi:   HOMEAUTO_MOCK=1 uvicorn homeauto.api:app --reload
@@ -31,10 +35,15 @@ from homeauto.hub import EventHub
 from homeauto.pinmap import DEFAULT_PINS
 from homeauto.sensors import SENSOR_TYPES, create_sensors
 from homeauto.store import EventStore
+from homeauto.wiring import build_wiring
 
 
 class SimulateBody(BaseModel):
     active: bool
+
+
+class EnabledBody(BaseModel):
+    enabled: bool
 
 
 def create_app(*, mock: bool | None = None, db_path: str | None = None) -> FastAPI:
@@ -57,7 +66,10 @@ def create_app(*, mock: bool | None = None, db_path: str | None = None) -> FastA
         sensors = create_sensors()
         for s in sensors.values():
             s.add_listener(store.add)
-            s.add_listener(hub.publish_threadsafe)
+            s.add_listener(lambda ev: hub.publish_threadsafe({"type": "event", **ev.to_dict()}))
+        for name in store.disabled_sensors():  # restore saved on/off settings
+            if name in sensors:
+                sensors[name].disable()
 
         app.state.mock, app.state.store, app.state.hub, app.state.sensors = mock, store, hub, sensors
         try:
@@ -88,6 +100,10 @@ def create_app(*, mock: bool | None = None, db_path: str | None = None) -> FastA
     def info():
         return {"mock": app.state.mock}
 
+    @app.get("/api/wiring")
+    def wiring():
+        return build_wiring()
+
     @app.get("/api/sensors")
     def list_sensors():
         return [s.snapshot() for s in app.state.sensors.values()]
@@ -100,11 +116,28 @@ def create_app(*, mock: bool | None = None, db_path: str | None = None) -> FastA
     def events(limit: int = Query(50, ge=1, le=500), sensor: str | None = None):
         return app.state.store.recent(limit, sensor)
 
+    @app.delete("/api/events")
+    def clear_events(sensor: str | None = None):
+        deleted = app.state.store.clear(sensor)
+        app.state.hub.publish_threadsafe({"type": "events_cleared", "sensor": sensor})
+        return {"deleted": deleted}
+
+    @app.put("/api/sensors/{name}/enabled")
+    def set_enabled(name: str, body: EnabledBody):
+        s = get_sensor(name)
+        (s.enable if body.enabled else s.disable)()
+        app.state.store.set_enabled(name, body.enabled)
+        snap = s.snapshot()
+        app.state.hub.publish_threadsafe({"type": "sensor_state", "sensor": snap})
+        return snap
+
     @app.post("/api/sensors/{name}/simulate")
     def simulate(name: str, body: SimulateBody):
         if not app.state.mock:
             raise HTTPException(403, "simulate is only available in mock mode")
         s = get_sensor(name)
+        if not s.enabled:
+            raise HTTPException(409, f"sensor {name!r} is disabled")
         pin = Device.pin_factory.pin(s.pin)
         # drive the pin to the level that means active / idle for this sensor
         (pin.drive_high if body.active == s._active_state else pin.drive_low)()
@@ -119,8 +152,7 @@ def create_app(*, mock: bool | None = None, db_path: str | None = None) -> FastA
                     {"type": "snapshot", "sensors": [s.snapshot() for s in app.state.sensors.values()]}
                 )
                 while True:
-                    ev = await q.get()
-                    await websocket.send_json({"type": "event", **ev.to_dict()})
+                    await websocket.send_json(await q.get())
             except WebSocketDisconnect:
                 pass
 
