@@ -1,0 +1,13 @@
+# Runtime dependencies for the HomeAuto backend.
+# Install:  pip install -r requirements.txt
+
+# GPIO access
+gpiozero>=2.0.1
+# Pi 5 GPIO backend (RPi.GPIO does not work on the Pi 5). Linux only.
+# If pip fails to build it on the Pi, use: sudo apt install python3-lgpio
+# and create the venv with --system-site-packages.
+lgpio>=0.2.2; sys_platform == "linux"
+
+# API + WebSocket server ([standard] includes the `websockets` library for /ws)
+fastapi>=0.115
+uvicorn[standard]>=0.30
