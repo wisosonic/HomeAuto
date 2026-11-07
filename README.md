@@ -36,7 +36,8 @@ runner.bat
 ```
 
 It creates the Python environment and installs the frontend packages on first run, starts the backend
-and the Vite dev server in two windows, and opens http://localhost:5173.
+and the Vite dev server together in **one window** (both log there), and opens http://localhost:5173.
+Stop with Ctrl+C (answer Y), or close the window.
 Requires Python 3.11+ and Node.js.
 
 **On the Raspberry Pi (real sensors):**
@@ -89,7 +90,8 @@ backend/homeauto/
   api.py         FastAPI app: REST + /ws, serves the built UI
 frontend/        React (Vite): dashboard, Sensors page, Wiring page
 docs/            wiring diagram (generated) and screenshots
-runner.bat       Windows launcher (mock mode)
+runner.bat       Windows launcher (mock mode, one window)
+scripts/         helper scripts (stop-homeauto.ps1 frees a leftover backend on port 8000)
 runner.sh        Raspberry Pi launcher
 ```
 
