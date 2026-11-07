@@ -2,7 +2,7 @@ import { useState } from "react";
 import { confirmDialog, notify } from "../notify.js";
 import { formatTime } from "./SensorCard.jsx";
 
-export default function EventLog({ events, onClear }) {
+export default function EventLog({ events, onClear, canClear = true }) {
   const [busy, setBusy] = useState(false);
 
   const clear = async () => {
@@ -28,9 +28,11 @@ export default function EventLog({ events, onClear }) {
     <section className="log">
       <div className="log-head">
         <h2>Events</h2>
-        <button className="btn danger" onClick={clear} disabled={busy || events.length === 0}>
-          Clear
-        </button>
+        {canClear && (
+          <button className="btn danger" onClick={clear} disabled={busy || events.length === 0}>
+            Clear
+          </button>
+        )}
       </div>
       {events.length === 0 ? (
         <p className="empty">No events yet.</p>

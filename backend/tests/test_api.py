@@ -1,13 +1,34 @@
+from contextlib import contextmanager
+
 import pytest
 from fastapi.testclient import TestClient
 
 from homeauto.api import create_app
 from homeauto.pinmap import DEFAULT_PINS
 
+ADMIN_PW = "test-password-1"
+
+
+@contextmanager
+def session(db=":memory:"):
+    """A TestClient logged in as the bootstrap admin."""
+    with TestClient(create_app(mock=True, db_path=db, admin_password=ADMIN_PW)) as c:
+        token = c.post("/api/auth/login", json={"username": "admin", "password": ADMIN_PW}).json()["token"]
+        c.headers["Authorization"] = f"Bearer {token}"
+        yield c
+
+
+@contextmanager
+def ws_connect(c):
+    """Open /ws and send the auth message the server requires first."""
+    with c.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "auth", "token": c.headers["Authorization"].split()[1]})
+        yield ws
+
 
 @pytest.fixture
 def client():
-    with TestClient(create_app(mock=True, db_path=":memory:")) as c:
+    with session() as c:
         yield c
 
 
@@ -32,7 +53,7 @@ def test_simulate_updates_state_and_history(client):
 
 
 def test_websocket_snapshot_then_event(client):
-    with client.websocket_connect("/ws") as ws:
+    with ws_connect(client) as ws:
         assert ws.receive_json()["type"] == "snapshot"
         client.post("/api/sensors/flame/simulate", json={"active": True})
         msg = ws.receive_json()
@@ -41,7 +62,7 @@ def test_websocket_snapshot_then_event(client):
 
 def test_simulate_forbidden_without_mock(monkeypatch):
     # real mode needs hardware; just check the guard using a mock-created app flipped off
-    with TestClient(create_app(mock=True, db_path=":memory:")) as c:
+    with session() as c:
         c.app.state.mock = False
         assert c.post("/api/sensors/pir/simulate", json={"active": True}).status_code == 403
 
@@ -72,7 +93,7 @@ def test_clear_events_all_and_per_sensor(client):
 
 
 def test_clear_events_broadcasts(client):
-    with client.websocket_connect("/ws") as ws:
+    with ws_connect(client) as ws:
         ws.receive_json()  # snapshot
         client.delete("/api/events")
         assert ws.receive_json() == {"type": "events_cleared", "sensor": None}
@@ -91,7 +112,7 @@ def test_disable_blocks_events_and_simulate(client):
 
 
 def test_disable_broadcasts_state(client):
-    with client.websocket_connect("/ws") as ws:
+    with ws_connect(client) as ws:
         ws.receive_json()
         client.put("/api/sensors/rain/enabled", json={"enabled": False})
         msg = ws.receive_json()
@@ -101,9 +122,9 @@ def test_disable_broadcasts_state(client):
 
 def test_disabled_setting_survives_restart(tmp_path):
     db = str(tmp_path / "h.db")
-    with TestClient(create_app(mock=True, db_path=db)) as c:
+    with session(db) as c:
         c.put("/api/sensors/sound/enabled", json={"enabled": False})
-    with TestClient(create_app(mock=True, db_path=db)) as c:
+    with session(db) as c:
         by_name = {s["name"]: s for s in c.get("/api/sensors").json()}
         assert by_name["sound"]["enabled"] is False
         assert by_name["pir"]["enabled"] is True
@@ -125,13 +146,13 @@ def test_clear_events_resets_detection_counts(client):
 
 def test_counts_restored_from_history_on_restart_and_reset_by_clear(tmp_path):
     db = str(tmp_path / "h.db")
-    with TestClient(create_app(mock=True, db_path=db)) as c:
+    with session(db) as c:
         for _ in range(2):
             c.post("/api/sensors/pir/simulate", json={"active": True})
             c.post("/api/sensors/pir/simulate", json={"active": False})
-    with TestClient(create_app(mock=True, db_path=db)) as c:
+    with session(db) as c:
         pir = c.get("/api/sensors/pir").json()
         assert pir["detection_count"] == 2 and pir["last_event"]["active"] is False
         c.delete("/api/events")
-    with TestClient(create_app(mock=True, db_path=db)) as c:
+    with session(db) as c:
         assert c.get("/api/sensors/pir").json()["detection_count"] == 0

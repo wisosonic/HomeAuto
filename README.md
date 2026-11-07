@@ -19,6 +19,9 @@ Everything runs **without any hardware too** (mock mode), so you can develop and
   description of what each sensor reports, what it is good for, and its limits.
 - **Wiring page:** a breadboard diagram, pin table, step list and a pre-power-on checklist, generated from
   the backend pin map so it never goes out of date.
+- **Users, roles and permissions:** sign-in with per-user accounts stored in SQLite (scrypt-hashed passwords).
+  Built-in `admin`, `operator` and `viewer` roles, plus your own roles built from fine-grained permissions
+  (view sensors, control sensors, clear events, manage users...). Managed from the Users page.
 - **Event history:** stored in SQLite, with a Clear button.
 - **Mock mode:** fake GPIO with Trigger/Clear buttons on each card, no Raspberry Pi needed.
 - **Tested without hardware:** the test suite uses gpiozero's mock pins.
@@ -39,6 +42,11 @@ It creates the Python environment and installs the frontend packages on first ru
 and the Vite dev server together in **one window** (both log there), and opens http://localhost:5173.
 Stop with Ctrl+C (answer Y), or close the window.
 Requires Python 3.11+ and Node.js.
+
+**First sign-in:** on the first start the backend creates a user `admin` and prints its random password once
+in the console (`[auth] first run: created user 'admin' with password '...'`). To choose it yourself, set
+`HOMEAUTO_ADMIN_PASSWORD` before the first start. Change it on the Account page, then add other users on the
+Users page.
 
 **On the Raspberry Pi (real sensors):**
 
@@ -86,9 +94,10 @@ backend/homeauto/
   pinmap.py      GPIO pin assignments (single source of truth)
   wiring.py      wiring data served to the Wiring page
   store.py       SQLite: event history + saved sensor settings
+  auth.py        users, roles, permissions, sessions (SQLite, scrypt)
   hub.py         bridges GPIO threads to WebSocket clients
   api.py         FastAPI app: REST + /ws, serves the built UI
-frontend/        React (Vite): dashboard, Sensors page, Wiring page
+frontend/        React (Vite): login, dashboard, Sensors, Wiring, Users and Account pages
 docs/            wiring diagram (generated) and screenshots
 runner.bat       Windows launcher (mock mode, one window)
 scripts/         helper scripts (stop-homeauto.ps1 frees a leftover backend on port 8000)
@@ -99,16 +108,25 @@ runner.sh        Raspberry Pi launcher
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/sensors`, `/api/sensors/{name}` | Sensor snapshots |
-| PUT | `/api/sensors/{name}/enabled` | Enable or disable a sensor (saved) |
-| GET | `/api/events?limit=&sensor=` | Event history, newest first |
-| DELETE | `/api/events[?sensor=]` | Clear history |
-| GET | `/api/wiring` | Pin map and breadboard layout |
-| GET | `/api/info` | `{"mock": bool}` |
-| POST | `/api/sensors/{name}/simulate` | Trigger a sensor (mock mode only) |
-| WS | `/ws` | Live `snapshot`, `event`, `sensor_state`, `events_cleared` messages |
+| POST | `/api/auth/login` | Sign in, returns a bearer token (public) |
+| POST | `/api/auth/logout`, `/api/auth/password` | End the session, change own password |
+| GET | `/api/auth/me` | Current user and permissions |
+| GET, POST | `/api/users` | List / create users (`users.manage`) |
+| PATCH, DELETE | `/api/users/{username}` | Change role, disable, reset password / delete (`users.manage`) |
+| GET, POST | `/api/roles` | List / create roles (list needs `users.manage` or `roles.manage`) |
+| PUT, DELETE | `/api/roles/{name}` | Edit permissions / delete a role (`roles.manage`) |
+| GET | `/api/permissions` | All permissions with descriptions |
+| GET | `/api/sensors`, `/api/sensors/{name}` | Sensor snapshots (`sensors.view`) |
+| PUT | `/api/sensors/{name}/enabled` | Enable or disable a sensor, saved (`sensors.control`) |
+| GET | `/api/events?limit=&sensor=` | Event history, newest first (`events.view`) |
+| DELETE | `/api/events[?sensor=]` | Clear history (`events.clear`) |
+| GET | `/api/wiring` | Pin map and breadboard layout (`wiring.view`) |
+| GET | `/api/info` | `{"mock": bool}` (public) |
+| POST | `/api/sensors/{name}/simulate` | Trigger a sensor, mock mode only (`sensors.simulate`) |
+| WS | `/ws` | First message `{"type":"auth","token":"..."}`, then live `snapshot`, `event`, `sensor_state`, `events_cleared` |
 
-Interactive docs are at `/docs` when the backend is running.
+Everything except the two public routes needs `Authorization: Bearer <token>`. Interactive docs are at
+`/docs` when the backend is running.
 
 ### Configuration
 
@@ -118,6 +136,7 @@ Interactive docs are at `/docs` when the backend is running.
 | `HOMEAUTO_DB` | `homeauto.db` | SQLite file |
 | `HOMEAUTO_CORS` | `http://localhost:5173` | Allowed origins (comma-separated) |
 | `HOMEAUTO_STATIC` | `frontend/dist` | Built UI folder to serve |
+| `HOMEAUTO_ADMIN_PASSWORD` | random, printed once | Password of the first-run `admin` user (used only while there are no users) |
 
 ## Development
 
@@ -140,8 +159,9 @@ backend.
 
 - **Not yet verified on real hardware.** Sensor polarity (PIR is active-high; the others are assumed
   active-low) and debounce times are based on typical modules and may need tuning.
-- **No authentication.** Anyone on your network can open the API and change settings, so use it on a trusted
-  network only. Authentication comes before any actuator support.
+- **No HTTPS.** Sign-in works, but passwords and tokens cross the network in clear text. Use it on a trusted
+  network, or put a TLS reverse proxy (Caddy, nginx) in front before exposing it further.
+- Sessions last 12 hours; five failed sign-ins lock a username for a minute.
 - Event history grows without limit (no pruning yet).
 
 ## Roadmap

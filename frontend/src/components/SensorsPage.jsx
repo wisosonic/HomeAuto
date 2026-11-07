@@ -3,7 +3,7 @@ import { notify } from "../notify.js";
 import { sensorInfo } from "../sensorInfo.js";
 import { formatTime, sensorLabels } from "./SensorCard.jsx";
 
-export default function SensorsPage({ sensors, onToggle }) {
+export default function SensorsPage({ sensors, onToggle, canControl = true }) {
   const [pending, setPending] = useState({}); // name -> true while a request is in flight
 
   const toggle = async (s) => {
@@ -28,6 +28,7 @@ export default function SensorsPage({ sensors, onToggle }) {
       <p className="hint">
         {enabledCount} of {sensors.length} enabled. A disabled sensor releases its GPIO pin and produces no
         events. The setting is saved and survives restarts.
+        {!canControl && " Your role can view sensors but not switch them."}
       </p>
       {sensors.length === 0 && <p className="empty">Waiting for backend…</p>}
       <ul className="sensor-list">
@@ -55,7 +56,7 @@ export default function SensorsPage({ sensors, onToggle }) {
                     type="checkbox"
                     role="switch"
                     checked={s.enabled}
-                    disabled={pending[s.name]}
+                    disabled={pending[s.name] || !canControl}
                     onChange={() => toggle(s)}
                     aria-label={`${s.enabled ? "Disable" : "Enable"} ${s.name}`}
                   />

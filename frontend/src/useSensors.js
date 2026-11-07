@@ -8,7 +8,7 @@ const MAX_EVENTS = 100;
  * Live sensor state: WebSocket (auto-reconnect) for snapshot + events,
  * REST for initial history, backend info and the actions (clear, enable/disable).
  */
-export function useSensors() {
+export function useSensors(token, can) {
   const [sensors, setSensors] = useState({}); // name -> snapshot
   const [events, setEvents] = useState([]); // newest first
   const [connected, setConnected] = useState(false);
@@ -16,8 +16,8 @@ export function useSensors() {
 
   useEffect(() => {
     getInfo().then((i) => setMock(i.mock)).catch(() => {});
-    getEvents(MAX_EVENTS).then(setEvents).catch(() => {});
-  }, []);
+    if (can("events.view")) getEvents(MAX_EVENTS).then(setEvents).catch(() => {});
+  }, [can]);
 
   useEffect(() => {
     let ws;
@@ -28,15 +28,22 @@ export function useSensors() {
 
     const connect = () => {
       ws = new WebSocket(wsUrl());
-      ws.onopen = () => {
+      // the server expects the token as the first message (not in the URL, so it stays out of logs)
+      ws.onopen = () => ws.send(JSON.stringify({ type: "auth", token }));
+      const markConnected = () => {
         setConnected(true);
         if (lostNotified) notify.success("Connection restored");
         everConnected = true;
         lostNotified = false;
       };
-      ws.onclose = () => {
+      ws.onclose = (e) => {
         setConnected(false);
         if (closed) return;
+        if (e.code === 4401 || e.code === 4403) {
+          closed = true; // retrying with the same token cannot succeed
+          notify.error(e.code === 4403 ? "Your role cannot see the live feed" : "Live feed refused the session");
+          return;
+        }
         // notify once per outage, and only if we had been connected before
         if (everConnected && !lostNotified) {
           lostNotified = true;
@@ -47,6 +54,7 @@ export function useSensors() {
       ws.onmessage = (m) => {
         const msg = JSON.parse(m.data);
         if (msg.type === "snapshot") {
+          markConnected(); // the server only sends this once the token was accepted
           setSensors(Object.fromEntries(msg.sensors.map((s) => [s.name, s])));
         } else if (msg.type === "sensor_state") {
           setSensors((prev) => ({ ...prev, [msg.sensor.name]: msg.sensor }));
@@ -86,7 +94,7 @@ export function useSensors() {
       clearTimeout(timer);
       ws?.close();
     };
-  }, []);
+  }, [token]);
 
   const clearEvents = useCallback(async () => {
     const result = await apiClearEvents(); // { deleted: n }

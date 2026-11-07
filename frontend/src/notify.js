@@ -20,6 +20,25 @@ export const notify = {
   info: (message, title) => toastr.info(message, title),
 };
 
+/** Ask for a line of text (e.g. a new password). Resolves to the text, or null if cancelled. */
+export async function promptDialog({ title, text = "", label = "", inputType = "text", confirmText = "OK" } = {}) {
+  const result = await Swal.fire({
+    title,
+    text,
+    input: inputType,
+    inputLabel: label,
+    inputAttributes: { autocomplete: "new-password" },
+    showCancelButton: true,
+    confirmButtonText: confirmText,
+    reverseButtons: true,
+    confirmButtonColor: cssVar("--accent") || "#2563eb",
+    background: cssVar("--panel") || undefined,
+    color: cssVar("--text") || undefined,
+    inputValidator: (v) => (v ? undefined : "Please enter a value"),
+  });
+  return result.isConfirmed ? result.value : null;
+}
+
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 /** Ask the user to confirm an action. Resolves to true only if they confirm. */
