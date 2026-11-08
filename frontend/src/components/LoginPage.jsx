@@ -1,4 +1,5 @@
 import { useState } from "react";
+import PasswordInput from "./PasswordInput.jsx";
 
 export default function LoginPage({ onLogin }) {
   const [username, setUsername] = useState("");
@@ -31,8 +32,7 @@ export default function LoginPage({ onLogin }) {
         </label>
         <label>
           Password
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"

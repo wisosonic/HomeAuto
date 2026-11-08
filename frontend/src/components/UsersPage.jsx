@@ -3,6 +3,7 @@ import {
   createRole, createUser, deleteRole, deleteUser, getPermissions, getRoles, getUsers, updateRole, updateUser,
 } from "../api.js";
 import { confirmDialog, notify, promptDialog } from "../notify.js";
+import PasswordInput from "./PasswordInput.jsx";
 
 /** Run an admin action, then refresh. Errors from the server are shown as toasts. */
 function useAction(reload) {
@@ -102,7 +103,7 @@ function UsersPanel({ me, users, roles, reload }) {
       <h3>Add user</h3>
       <form className="inline-form" onSubmit={add}>
         <input placeholder="username" value={form.username} onChange={set("username")} autoComplete="off" required aria-label="Username" />
-        <input type="password" placeholder="password (8+ characters)" value={form.password} onChange={set("password")} autoComplete="new-password" minLength={8} required aria-label="Password" />
+        <PasswordInput placeholder="password (8+ characters)" value={form.password} onChange={set("password")} autoComplete="new-password" minLength={8} required aria-label="Password" />
         <select value={form.role} onChange={set("role")} aria-label="Role">
           {roles.map((r) => <option key={r.name}>{r.name}</option>)}
         </select>

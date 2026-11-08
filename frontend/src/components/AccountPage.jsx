@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { changePassword } from "../api.js";
 import { notify } from "../notify.js";
+import PasswordInput from "./PasswordInput.jsx";
 
 export default function AccountPage({ user }) {
   const [current, setCurrent] = useState("");
@@ -42,15 +43,15 @@ export default function AccountPage({ user }) {
       <form className="stack" onSubmit={submit}>
         <label>
           Current password
-          <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
+          <PasswordInput value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
         </label>
         <label>
           New password <small>(8 to 128 characters)</small>
-          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" minLength={8} required />
+          <PasswordInput value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" minLength={8} required />
         </label>
         <label>
           Repeat new password
-          <input type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" required />
+          <PasswordInput value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" required />
         </label>
         {mismatch && <p className="form-error">The passwords do not match.</p>}
         <button className="btn primary" disabled={busy || mismatch || !current || next.length < 8 || !again}>

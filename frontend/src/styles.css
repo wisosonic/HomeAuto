@@ -161,6 +161,16 @@ input:not([type="checkbox"]), select {
   border: 1px solid var(--line); background: var(--bg); color: var(--text);
 }
 input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+label > .pw-field { margin-top: 4px; }
+.pw-field { display: block; position: relative; }
+.pw-field input { padding-right: 38px; }
+.pw-toggle {
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 32px; height: 28px; padding: 0;
+  background: none; border: 0; border-radius: 6px; color: var(--muted); cursor: pointer;
+}
+.pw-toggle:hover { color: var(--text); }
+.pw-toggle:focus-visible { outline: 2px solid var(--accent); }
 .stack { display: grid; gap: 12px; max-width: 360px; font-size: 14px; }
 .stack label small { color: var(--muted); }
 .stack .btn { justify-self: start; }
