@@ -42,6 +42,12 @@ export const setSensorEnabled = (name, enabled) =>
 export const simulate = (name, active) =>
   request(`/api/sensors/${name}/simulate`, json("POST", { active }));
 
+// schedule rules (start/end are epoch seconds)
+export const getSchedules = () => request("/api/schedules");
+export const createSchedule = (rule) => request("/api/schedules", json("POST", rule));
+export const updateSchedule = (id, rule) => request(`/api/schedules/${id}`, json("PUT", rule));
+export const deleteSchedule = (id) => request(`/api/schedules/${id}`, { method: "DELETE" });
+
 // auth
 export const login = (username, password) => request("/api/auth/login", json("POST", { username, password }));
 export const logout = () => request("/api/auth/logout", { method: "POST" });

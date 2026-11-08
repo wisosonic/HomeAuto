@@ -33,6 +33,8 @@ PERMISSIONS: dict[str, str] = {
     "events.view": "See the event history",
     "events.clear": "Delete the event history",
     "wiring.view": "See wiring and pin configuration",
+    "schedules.view": "See schedule rules",
+    "schedules.manage": "Create, edit and delete schedule rules",
     "users.manage": "Create, edit and delete users",
     "roles.manage": "Create, edit and delete roles",
 }
@@ -41,9 +43,9 @@ DEFAULT_ROLES: dict[str, list[str]] = {
     "admin": list(PERMISSIONS),
     "operator": [
         "sensors.view", "sensors.control", "sensors.simulate",
-        "events.view", "events.clear", "wiring.view",
+        "events.view", "events.clear", "wiring.view", "schedules.view", "schedules.manage",
     ],
-    "viewer": ["sensors.view", "events.view", "wiring.view"],
+    "viewer": ["sensors.view", "events.view", "wiring.view", "schedules.view"],
 }
 LOCKED_ROLE = "admin"  # always holds every permission
 

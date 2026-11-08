@@ -173,6 +173,18 @@ label > .pw-field { margin-top: 4px; }
 }
 .pw-toggle:hover { color: var(--text); }
 .pw-toggle:focus-visible { outline: 2px solid var(--accent); }
+.schedule-form { max-width: 520px; margin-bottom: 8px; }
+.schedule-form h3 { margin: 0; }
+.schedule-form .when { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sensor-pick { border: 1px solid var(--line); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 12px; margin: 0; }
+.sensor-pick legend { padding: 0 6px; color: var(--muted); font-size: 13px; }
+.sensor-pick .pick { display: flex; align-items: center; gap: 6px; text-transform: capitalize; }
+.sensor-pick .pick input { margin: 0; }
+.form-actions { display: flex; gap: 8px; }
+tr.ended td { opacity: .55; }
+.row-actions { white-space: nowrap; }
+.muted { color: var(--muted); }
+@media (max-width: 520px) { .schedule-form .when { grid-template-columns: 1fr; } }
 .wiring-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0; }
 .wiring-actions .hint { margin: 0; }
 .stack { display: grid; gap: 12px; max-width: 360px; font-size: 14px; }

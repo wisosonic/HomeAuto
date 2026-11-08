@@ -42,6 +42,11 @@ backend/homeauto/
                  PERMISSIONS dict = the ONLY place permissions are defined (code decides what exists, roles
                  are stored sets of them). scrypt passwords (stdlib), opaque bearer tokens (only the SHA-256
                  is stored), login lockout, last-manager guard. AuthError(status, message) -> JSON via api.py
+  schedule.py    ScheduleStore (rules table, same SQLite file). A rule only HOLDS its sensors on during
+                 [start, end); effective state = saved on/off setting (sensor_settings) OR held. api.py's
+                 reconcile() applies it (startup, every rule/toggle change, 1 s background tick), so sensors
+                 fall back to their saved setting when a rule ends. Disabling a held sensor -> 409.
+                 Permissions schedules.view / schedules.manage; times are epoch seconds
   hub.py         EventHub: bridges gpiozero threads -> asyncio via call_soon_threadsafe
   api.py         create_app(mock=, db_path=); REST + /ws; serves frontend/dist if it exists
 backend/tests/   pytest, hardware-free (gpiozero MockFactory)

@@ -15,6 +15,10 @@ the permission in brackets is required):
   GET  /api/events?limit=&sensor=   recent history (newest first)     [events.view]
   DELETE /api/events?sensor=        clear history                     [events.clear]
   PUT  /api/sensors/{name}/enabled  {"enabled": bool}                 [sensors.control]
+                                    (409 when disabling a sensor a schedule rule holds on)
+  GET  /api/schedules               rules, each with status            [schedules.view]
+  POST /api/schedules, PUT/DELETE /api/schedules/{id}                 [schedules.manage]
+                                    {"name","sensors":[..],"start","end"} epoch seconds
   POST /api/sensors/{name}/simulate mock mode only                    [sensors.simulate]
 WebSocket:
   /ws   the client's first message must be {"type":"auth","token":"..."} (needs sensors.view),
@@ -32,7 +36,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from contextlib import asynccontextmanager
+import time
+from contextlib import asynccontextmanager, suppress
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -46,6 +52,7 @@ from pydantic import BaseModel
 from homeauto.auth import PERMISSIONS, AuthError, AuthStore
 from homeauto.hub import EventHub
 from homeauto.pinmap import DEFAULT_PINS
+from homeauto.schedule import ScheduleError, ScheduleStore, status_of
 from homeauto.sensors import SENSOR_TYPES, create_sensors
 from homeauto.store import EventStore
 from homeauto.wiring import build_wiring
@@ -57,6 +64,13 @@ class SimulateBody(BaseModel):
 
 class EnabledBody(BaseModel):
     enabled: bool
+
+
+class ScheduleBody(BaseModel):
+    name: str
+    sensors: list[str]
+    start: float  # epoch seconds
+    end: float
 
 
 class LoginBody(BaseModel):
@@ -122,9 +136,27 @@ def create_app(
         counts, last = store.activation_counts(), store.last_events()
         for name, s in sensors.items():
             s.restore_stats(counts.get(name, 0), last.get(name))
-        for name in store.disabled_sensors():  # restore saved on/off settings
-            if name in sensors:
-                sensors[name].disable()
+        schedules = ScheduleStore(db_path)
+
+        def reconcile(now: float | None = None) -> None:
+            """Make every sensor's state = saved on/off setting OR held on by an open schedule rule."""
+            held = schedules.holds(time.time() if now is None else now)
+            off = store.disabled_sensors()
+            for name, s in sensors.items():
+                want = name not in off or name in held
+                if want != s.enabled:
+                    (s.enable if want else s.disable)()
+                    hub.publish_threadsafe({"type": "sensor_state", "sensor": s.snapshot()})
+
+        async def scheduler() -> None:
+            while True:
+                await asyncio.sleep(1)
+                try:
+                    reconcile()
+                except Exception:  # keep the loop alive; a failed tick is retried a second later
+                    log.exception("schedule tick failed")
+
+        reconcile()  # restores the saved on/off settings, plus any rule that is open right now
 
         auth = AuthStore(db_path)
         created = auth.bootstrap_admin(admin_password)  # first run only
@@ -133,13 +165,18 @@ def create_app(
             print(f"[auth] first run: created user '{created[0]}' with password '{created[1]}'", flush=True)
 
         app.state.mock, app.state.store, app.state.hub, app.state.sensors = mock, store, hub, sensors
-        app.state.auth = auth
+        app.state.auth, app.state.schedules, app.state.reconcile = auth, schedules, reconcile
+        task = asyncio.create_task(scheduler())
         try:
             yield
         finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
             for s in sensors.values():
                 s.close()
             store.close()
+            schedules.close()
             auth.close()
             if mock:
                 Device.pin_factory.reset()
@@ -173,6 +210,10 @@ def create_app(
             return user
 
         return dep
+
+    @app.exception_handler(ScheduleError)
+    async def schedule_error(_: Request, exc: ScheduleError):
+        return JSONResponse({"detail": exc.message}, status_code=exc.status)
 
     def get_sensor(name: str):
         try:
@@ -215,11 +256,49 @@ def create_app(
     @app.put("/api/sensors/{name}/enabled", dependencies=[Depends(require("sensors.control"))])
     def set_enabled(name: str, body: EnabledBody):
         s = get_sensor(name)
-        (s.enable if body.enabled else s.disable)()
-        app.state.store.set_enabled(name, body.enabled)
+        rule = app.state.schedules.holds(time.time()).get(name)
+        if rule and not body.enabled:
+            until = datetime.fromtimestamp(rule["end"]).strftime("%Y-%m-%d %H:%M")
+            raise HTTPException(409, f"{name} is held on by schedule '{rule['name']}' until {until}")
+        app.state.store.set_enabled(name, body.enabled)  # the saved (baseline) setting
+        app.state.reconcile()
         snap = s.snapshot()
         app.state.hub.publish_threadsafe({"type": "sensor_state", "sensor": snap})
         return snap
+
+    # -- schedule rules --------------------------------------------------------
+    def rule_out(rule: dict, now: float) -> dict:
+        return {**rule, "status": status_of(rule, now)}
+
+    def checked(body: ScheduleBody) -> tuple[str, list[str]]:
+        return ScheduleStore.validate(
+            body.name, body.sensors, body.start, body.end, set(app.state.sensors), time.time()
+        )
+
+    @app.get("/api/schedules", dependencies=[Depends(require("schedules.view"))])
+    def list_schedules():
+        now = time.time()
+        return [rule_out(r, now) for r in app.state.schedules.list()]
+
+    @app.post("/api/schedules", status_code=201)
+    def create_schedule(body: ScheduleBody, user: dict = Depends(require("schedules.manage"))):
+        name, sensors = checked(body)
+        rule = app.state.schedules.create(name, sensors, body.start, body.end, user["username"])
+        app.state.reconcile()
+        return rule_out(rule, time.time())
+
+    @app.put("/api/schedules/{rule_id}", dependencies=[Depends(require("schedules.manage"))])
+    def update_schedule(rule_id: int, body: ScheduleBody):
+        name, sensors = checked(body)
+        rule = app.state.schedules.update(rule_id, name, sensors, body.start, body.end)
+        app.state.reconcile()
+        return rule_out(rule, time.time())
+
+    @app.delete("/api/schedules/{rule_id}", dependencies=[Depends(require("schedules.manage"))])
+    def delete_schedule(rule_id: int):
+        app.state.schedules.delete(rule_id)
+        app.state.reconcile()  # sensors the rule was holding fall back to their saved setting
+        return {"ok": True}
 
     @app.post("/api/sensors/{name}/simulate", dependencies=[Depends(require("sensors.simulate"))])
     def simulate(name: str, body: SimulateBody):

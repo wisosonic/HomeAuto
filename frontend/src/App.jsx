@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import AccountPage from "./components/AccountPage.jsx";
 import EventLog from "./components/EventLog.jsx";
 import LoginPage from "./components/LoginPage.jsx";
+import SchedulesPage from "./components/SchedulesPage.jsx";
 import SensorCard from "./components/SensorCard.jsx";
 import SensorsPage from "./components/SensorsPage.jsx";
 import UsersPage from "./components/UsersPage.jsx";
@@ -13,6 +14,7 @@ import { useSensors } from "./useSensors.js";
 const PAGES = [
   { id: "dashboard", label: "Dashboard", hash: "#/", needs: ["sensors.view"] },
   { id: "sensors", label: "Sensors", hash: "#/sensors", needs: ["sensors.view"] },
+  { id: "schedules", label: "Schedules", hash: "#/schedules", needs: ["schedules.view"] },
   { id: "wiring", label: "Wiring", hash: "#/wiring", needs: ["wiring.view"] },
   { id: "users", label: "Users", hash: "#/users", needs: ["users.manage", "roles.manage"] },
   { id: "account", label: "Account", hash: "#/account", needs: [], hidden: true },
@@ -60,6 +62,7 @@ function Shell({ auth }) {
       {page === "account" && <AccountPage user={user} />}
       {page === "users" && <UsersPage me={user} can={can} />}
       {page === "wiring" && <WiringPage />}
+      {page === "schedules" && <SchedulesPage sensors={sensors} canManage={can("schedules.manage")} />}
       {page === "sensors" && <SensorsPage sensors={sensors} onToggle={setEnabled} canControl={can("sensors.control")} />}
       {page === "dashboard" && (
         <main>
