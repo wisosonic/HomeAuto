@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { notify } from "../notify.js";
 import { sensorInfo } from "../sensorInfo.js";
+import SensorImage from "./SensorImage.jsx";
 import { formatTime, sensorLabels } from "./SensorCard.jsx";
 
 export default function SensorsPage({ sensors, onToggle, canControl = true }) {
@@ -39,7 +40,7 @@ export default function SensorsPage({ sensors, onToggle, canControl = true }) {
           return (
             <li key={s.name} className={s.enabled ? "" : "off"}>
               <div className="row">
-                <span className="icon">{l.icon}</span>
+                <SensorImage kind={s.kind} label={s.name.replace("_", " ")} />
                 <div className="info">
                   <strong>
                     {s.name.replace("_", " ")}

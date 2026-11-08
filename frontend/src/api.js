@@ -34,7 +34,7 @@ const json = (method, body) => ({
 });
 
 export const getInfo = () => request("/api/info");
-export const getWiring = () => request("/api/wiring");
+export const getWiring = (enabledOnly = false) => request(`/api/wiring${enabledOnly ? "?enabled_only=true" : ""}`);
 export const getEvents = (limit = 100) => request(`/api/events?limit=${limit}`);
 export const clearEvents = () => request("/api/events", { method: "DELETE" });
 export const setSensorEnabled = (name, enabled) =>

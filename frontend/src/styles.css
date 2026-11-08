@@ -114,6 +114,8 @@ th { color: var(--muted); font-weight: 600; border-top: none; }
 .sensor-list { list-style: none; margin: 8px 0 0; padding: 0; }
 .sensor-list li { padding: 12px 0; border-top: 1px solid var(--line); }
 .sensor-list .row { display: flex; align-items: center; gap: 12px; }
+.sensor-list .sensor-img { width: 84px; height: 50px; flex: none; border-radius: 6px; background: var(--bg); }
+.sensor-list li.off .sensor-img { opacity: .4; filter: grayscale(1); }
 .sensor-list li.off .icon, .sensor-list li.off .info, .sensor-list li.off .desc, .sensor-list li.off .more { opacity: .5; }
 .sensor-list .info { flex: 1; display: grid; text-transform: capitalize; }
 .sensor-list .info small { color: var(--muted); text-transform: none; }
@@ -128,8 +130,8 @@ th { color: var(--muted); font-weight: 600; border-top: none; }
 
 /* sensor descriptions */
 .sensor-list .model { color: var(--muted); font-weight: 400; text-transform: none; }
-.sensor-list .desc { margin: 8px 0 0 36px; font-size: 14px; }
-.more { margin: 6px 0 0 36px; font-size: 13px; }
+.sensor-list .desc { margin: 8px 0 0 96px; font-size: 14px; }
+.more { margin: 6px 0 0 96px; font-size: 13px; }
 .more summary { cursor: pointer; color: var(--accent); width: fit-content; }
 .more dl { margin: 8px 0 0; display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; }
 .more dt { color: var(--muted); font-weight: 600; }
@@ -171,6 +173,8 @@ label > .pw-field { margin-top: 4px; }
 }
 .pw-toggle:hover { color: var(--text); }
 .pw-toggle:focus-visible { outline: 2px solid var(--accent); }
+.wiring-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0; }
+.wiring-actions .hint { margin: 0; }
 .stack { display: grid; gap: 12px; max-width: 360px; font-size: 14px; }
 .stack label small { color: var(--muted); }
 .stack .btn { justify-self: start; }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getWiring } from "../api.js";
+import { notify } from "../notify.js";
 import WiringDiagram from "./WiringDiagram.jsx";
 
 const STEPS = [
@@ -24,8 +25,23 @@ export default function WiringPage() {
   const [error, setError] = useState(null);
   const [checked, setChecked] = useState({});
 
+  const [enabledOnly, setEnabledOnly] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const load = (only) => {
+    setBusy(true);
+    return getWiring(only)
+      .then((w) => {
+        setWiring(w);
+        setEnabledOnly(only);
+        setError(null);
+      })
+      .catch((e) => (wiring ? notify.error(`Could not regenerate wiring: ${e.message}`) : setError(e.message)))
+      .finally(() => setBusy(false));
+  };
+
   useEffect(() => {
-    getWiring().then(setWiring).catch((e) => setError(e.message));
+    load(false);
   }, []);
 
   if (error) return <p className="empty">Could not load wiring: {error}</p>;
@@ -39,8 +55,25 @@ export default function WiringPage() {
           Generated from the backend pin map (<code>pinmap.py</code>). Wires in rows b–e of a column connect to
           that column's module pin. The pin order drawn is illustrative: match your module's silkscreen labels.
         </p>
+        <div className="wiring-actions">
+          <button className="btn primary" disabled={busy} onClick={() => load(true).then(() => notify.success("Wiring regenerated for enabled sensors"))}>
+            Regenerate for enabled sensors
+          </button>
+          {enabledOnly && (
+            <button className="btn" disabled={busy} onClick={() => load(false)}>Show all sensors</button>
+          )}
+          <span className="hint">
+            {enabledOnly
+              ? `Showing ${wiring.modules.length} enabled sensor(s); they are packed to the left, the board keeps its full size.`
+              : "Showing every sensor, enabled or not."}
+          </span>
+        </div>
         <div className="diagram-scroll">
-          <WiringDiagram wiring={wiring} />
+          {wiring.modules.length === 0 ? (
+            <p className="empty">No sensors are enabled, so there is nothing to wire.</p>
+          ) : (
+            <WiringDiagram wiring={wiring} />
+          )}
         </div>
       </section>
 

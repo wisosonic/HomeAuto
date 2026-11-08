@@ -10,7 +10,7 @@ the permission in brackets is required):
   GET/POST /api/users, PATCH/DELETE /api/users/{username}     [users.manage]
   GET  /api/roles, /api/permissions                           [users.manage or roles.manage]
   POST /api/roles, PUT/DELETE /api/roles/{name}               [roles.manage]
-  GET  /api/wiring                  pin map + breadboard layout       [wiring.view]
+  GET  /api/wiring[?enabled_only=]  pin map + breadboard layout       [wiring.view]
   GET  /api/sensors, /api/sensors/{name}                              [sensors.view]
   GET  /api/events?limit=&sensor=   recent history (newest first)     [events.view]
   DELETE /api/events?sensor=        clear history                     [events.clear]
@@ -185,8 +185,10 @@ def create_app(
         return {"mock": app.state.mock}
 
     @app.get("/api/wiring", dependencies=[Depends(require("wiring.view"))])
-    def wiring():
-        return build_wiring()
+    def wiring(enabled_only: bool = False):
+        if not enabled_only:
+            return build_wiring()
+        return build_wiring(only={n for n, s in app.state.sensors.items() if s.enabled})
 
     @app.get("/api/sensors", dependencies=[Depends(require("sensors.view"))])
     def list_sensors():

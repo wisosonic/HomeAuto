@@ -20,8 +20,12 @@ MODULE_INFO: dict[str, tuple[str, str, str]] = {
 }
 
 
-def build_wiring(pins: dict[str, int] | None = None) -> dict:
+def build_wiring(pins: dict[str, int] | None = None, only: set[str] | None = None) -> dict:
+    """`only` restricts the map to those sensor keys; columns are re-packed with no gaps."""
     pins = DEFAULT_PINS if pins is None else pins
+    columns_total = 5 * len(pins)  # board size stays that of the full set, so the image never resizes
+    if only is not None:
+        pins = {k: v for k, v in pins.items() if k in only}
     modules = []
     for i, (key, gpio) in enumerate(pins.items()):
         label, vcc, signal = MODULE_INFO.get(key, (key, "3V3", "DO"))
@@ -43,5 +47,5 @@ def build_wiring(pins: dict[str, int] | None = None) -> dict:
     return {
         "power": [{"name": n, "physical_pin": p} for n, p in POWER_PINS.items()],
         "modules": modules,
-        "columns_total": 5 * len(modules),
+        "columns_total": columns_total,
     }

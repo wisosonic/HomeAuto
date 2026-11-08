@@ -82,6 +82,15 @@ def test_wiring_matches_pinmap(client):
     assert all(m["physical_pin"] for m in w["modules"])
 
 
+def test_wiring_enabled_only_repacks_columns(client):
+    client.put("/api/sensors/pir/enabled", json={"enabled": False})
+    w = client.get("/api/wiring", params={"enabled_only": True}).json()
+    assert "pir" not in [m["key"] for m in w["modules"]]
+    assert w["modules"][0]["columns"] == {"vcc": 2, "signal": 3, "gnd": 4}
+    assert w["columns_total"] == 5 * len(DEFAULT_PINS)  # same board size as the full map
+    assert len(client.get("/api/wiring").json()["modules"]) == len(DEFAULT_PINS)
+
+
 def test_clear_events_all_and_per_sensor(client):
     for name in ("pir", "flame"):
         client.post(f"/api/sensors/{name}/simulate", json={"active": True})
